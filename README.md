@@ -1,28 +1,6 @@
 # real-time-social-spaces
 
-/*
-What we're going to do today:
-
--initial scene setup (revisit)
-
-- using an init function to clean up code
-
-- add a texture
-- textures can describe more than just images
-- they can describe surface properties like opacity or shinyness
-
-- add a draw loop (use window.requestAnimationFrame)
-
-- exercise - do something dynamic within the draw loop
-
-- define and use frameCount to have things happen along frame
-
-*/
-
-
-
-
-// ~~ Base Code for Library Usage ~~ //
+// ~~ Base Code for Three.JS Library ~~ //
 
 // Create variables and make them available globally
 let scene;
