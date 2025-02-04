@@ -1,5 +1,9 @@
 # real-time-social-spaces
 
+```javascript
+
+
+
 // ~~ Base Code for Three.JS Library ~~ //
 
 // Create variables and make them available globally
@@ -44,3 +48,4 @@ function draw() {
 }
 
 init();
+```
