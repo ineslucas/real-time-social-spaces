@@ -1,4 +1,4 @@
-# Three.js Journey
+# Followed a 2 hour tutorial from Three.js Journey.
 
 ## Setup
 Download [Node.js](https://nodejs.org/en/download/).
