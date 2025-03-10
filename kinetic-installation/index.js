@@ -225,3 +225,49 @@ function draw() {
 // scene.background = new THREE.Color(0.9,0.4,0.3)
 
 init();
+
+///////////////////////////////////////
+
+let raycaster = new THREE.Raycaster();
+let pointer = new THREE.Vector2();
+
+function onPointerPress(ev){
+  console.log(ev);
+  let mx = ev.clientX;
+  let my = ev.clientY;
+  console.log(mx, my);
+
+  // Convert from pixel coordinates to normalized coordinates
+  pointer.x = (ev.clientX / window.innerWidth) * 2 - 1;
+  pointer.y = -(ev.clientY / window.innerHeight) * 2 + 1;
+
+  console.log(pointer);
+
+  // Now we have normalized coordinates, so we can use them to update the raycaster.
+  // Raycaster is essentially a line that shoots out from the camera through the mouse position, like a laser pointer.
+
+  // Update the raycaster:
+  raycaster.setFromCamera(pointer, camera);
+
+  const intersects = raycaster.intersectObjects(scene.children, true);
+
+   // Check if we hit anything
+   if (intersects.length > 0) {
+    // Get the first (closest) intersected object
+    const intersectedObject = intersects[0].object;
+
+    // Change the color of the clicked object
+    if (intersectedObject.material) {
+      intersectedObject.material.color.setHex(Math.random() * 0xffffff);
+    }
+
+    console.log('Clicked on:', intersectedObject);
+  }
+
+  // Meshes is an array of all the objects in the scene.
+  // raycaster.intersectObjects(meshes) will return an array of all the objects that the raycaster intersects with.
+
+  // There's transform controls, which were built in ThreeJS with the raycaster.
+}
+
+window.addEventListener('click', onPointerPress);
