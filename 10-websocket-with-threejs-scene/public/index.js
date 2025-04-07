@@ -14,37 +14,10 @@ let controls;
 
 let socket;
 
-function setupMySocket(){
-  socket = io();
-  socket.on('msg', onMessage);
-}
+// 3D models
+let leek; // Global variable to store the leek model
 
-function onMessage(msg){
-  console.log(msg);
-  let geo = new THREE.TorusGeometry(2,0.1,12,12);
-  let mat = new THREE.MeshNormalMaterial();
-  let mesh = new THREE.Mesh(geo,mat);
-  mesh.position.set(msg.x,msg.y,msg.z);
-  scene.add(mesh);
-}
-
-function onKeyDown(ev){
-  if (ev.key === "p"){
-    let myMessage = {
-      x: camera.position.x,
-      y: camera.position.y,
-      z: camera.position.z
-    };
-    socket.emit('msg', myMessage);
-  }
-}
-
-// TODO:
-// See if material is correct;
-// Add shadows;
-// Play around with the lights;
-
-function loadModel() {
+function loadBricksModel() {
   // first create a loader
   let loader = new GLTFLoader();
 
@@ -133,6 +106,139 @@ function loadModel() {
   );
 }
 
+function loadLeekModel(){
+  let loader = new GLTFLoader(); // handles both glb and gltf files
+
+  // Set up Draco loader for compressed models
+  const dracoLoader = new DRACOLoader();
+  dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/'); // Use CDN path
+  dracoLoader.setDecoderConfig({ type: 'js' }); // Use JavaScript decoder
+  loader.setDRACOLoader(dracoLoader);
+
+  // then load the file and add it to scene
+  loader.load(
+    "./models/leek.gltf",
+    // onLoad callback
+    function (gltf) {
+      console.log("Leek Model loaded successfully!");
+
+      // Assigning the loaded model to the global leek variable
+      leek = gltf;
+
+      // DEBUG: Log the entire model structure to inspect
+      console.log("Full GLTF object:", gltf);
+
+      // Traverse to debug materials and textures
+      gltf.scene.traverse((obj) => {
+        if (obj.isMesh) {
+          console.log("Mesh found:", obj.name);
+          console.log("Material:", obj.material);
+
+          // Check if the material has a map (texture)
+          if (obj.material && obj.material.map) {
+            console.log("Has texture map:", obj.material.map);
+          } else {
+            console.log("No texture map found on this material");
+
+            obj.material.roughness = 0.8;
+            obj.material.metalness = 0.05;
+            obj.material.envMapIntensity = 1.5; // Increase material reflectivity for better light interaction
+
+            console.log("Optimized material properties for leek appearance");
+          }
+
+          obj.castShadow = true;
+          obj.receiveShadow = true;
+        }
+      });
+    },
+    // onProgress callback
+    function (xhr) {
+      console.log((xhr.loaded / xhr.total * 100) + '% loaded');
+    },
+    // onError callback without fallback object atm.
+    function (error) {
+      console.error('An error happened when loading the model:', error);
+    }
+  );
+}
+
+/*
+   WEBSOCKET
+             */
+
+function setupMySocket(){
+  socket = io();
+  socket.on('msg', onMessage);
+}
+
+function onMessage(msg){
+  console.log(msg);
+  // TBD understand what exactly is triggering the torus;
+  let geo = new THREE.TorusGeometry(2,0.1,12,12);
+  let mat = new THREE.MeshNormalMaterial();
+  let mesh = new THREE.Mesh(geo,mat);
+  mesh.position.set(msg.x,msg.y,msg.z);
+  scene.add(mesh);
+}
+
+function onKeyDown(ev){
+  if (ev.key === "p"){
+    let myMessage = {
+      x: camera.position.x,
+      y: camera.position.y,
+      z: camera.position.z
+    };
+    socket.emit('msg', myMessage);
+  }
+
+  if (ev.key === "l" || ev.key === "L"){
+    if (leek){
+      // Simple positioning - not dynamic.
+      // leek.scene.position.set(0, 1, 0); // y=1 above the brick
+      // leek.scene.rotation.set(0, 4, 80);
+
+      // Dynamic positioning - based on camera position.
+        // Calculate position in front of the player
+      // Get forward direction vector
+      const forwardDir = new THREE.Vector3(0, 0, -1);
+      forwardDir.applyQuaternion(camera.quaternion);
+
+      // Scale it to place the leek 2 units in front of the camera
+      const distance = 2;
+      const targetPosition = new THREE.Vector3(
+        camera.position.x + forwardDir.x * distance,
+        camera.position.y - 0.5, // Slightly below eye level
+        camera.position.z + forwardDir.z * distance
+      );
+
+      // Position the leek at the calculated position
+      leek.scene.position.copy(targetPosition);
+
+      // Make the leek face the player
+      leek.scene.lookAt(camera.position);
+
+      // Optional: adjust rotation for a better appearance
+      leek.scene.rotation.y += Math.PI; // Make it face the player
+
+      scene.add(leek.scene);
+
+      console.log("Leek added in front of player at position:", targetPosition);
+
+    } else {
+      console.log("Leek model not loaded yet");
+    }
+  }
+}
+
+
+// TODO:
+// See if material is correct;
+// Add shadows;
+// Play around with the lights;
+
+
+
 function lights(){
   /* Lights */
   // More subtle ambient light
@@ -200,8 +306,9 @@ function init() {
   // add websocket support
   setupMySocket();
 
-  loadModel();
   lights();
+  loadBricksModel();
+  loadLeekModel();
 
   window.addEventListener('keydown', onKeyDown);
 
