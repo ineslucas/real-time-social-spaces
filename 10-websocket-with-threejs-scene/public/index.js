@@ -1,3 +1,5 @@
+// Aidan will send a threejs-webrtc.
+
 import * as THREE from "three";
 import { FirstPersonControls } from "./FirstPersonControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
@@ -167,30 +169,60 @@ function loadLeekModel(){
    WEBSOCKET
              */
 
-function setupMySocket(){
-  socket = io();
+function setupMySocket(){ // Initializing the socket connection - which needs to be called in init().
+  // Step 1: Import library in index.html
+  // Step 2: Initialize the socket connection.
+  socket = io(); // This establishes the connection to the websocket server.
+
+  socket.on('connect', onConnection); // Not needed, but good to have.
+
+  // Step 3: Event handler for the connection.
   socket.on('msg', onMessage);
+    // msg has been set up in the server as a message that will be sent out to everyone.
+    // could also be socket.on('connect', onConnection);
+      // connect is a built-in event that is triggered when the connection is established - which is why 'connection' does not work
+      // onConnection or onMessage are the callback functions that are triggered when the message is received.
+      // connect is a websocket event for frontend where as connection is a websocket event for the server.
+
+  // Later:
+  // Emit takes the data type, wraps it in an envelope and gives the variable a name, in this case we used msg, but this is just an arbitrary
+  // Once the message is emitted by the sender, the server will then send it to all participants, including the one who initially emitted it.
 }
 
+function onConnection(){
+  console.log("Our socket is connected to the server");
+}
+
+// this comes later!! triggered by onKeyDown event, should be underneath. 
 function onMessage(msg){
   console.log(msg);
   // TBD understand what exactly is triggering the torus;
+    // This is triggered from server side in response to onKeyDown.
   let geo = new THREE.TorusGeometry(2,0.1,12,12);
-  let mat = new THREE.MeshNormalMaterial();
+  let mat = new THREE.MeshNormalMaterial({color: msg.color});
   let mesh = new THREE.Mesh(geo,mat);
   mesh.position.set(msg.x,msg.y,msg.z);
   scene.add(mesh);
 }
 
+// onKeyDown is the function to follow the keydown event we set up in init.
 function onKeyDown(ev){
   if (ev.key === "p"){
+    let myColor = document.getElementById('colorInput').value;
+      // Could be a global variable.
+        // This color will be changed for all toruses depending on whether we're creating a new one or changing an existing one.
     let myMessage = {
+      // Here you can add whatever data you want to send to the frontend from each client connected through websocket.
+      // Here we're triggering it through the keydown event, but we could also add it to the draw loop, if we want it to keep hapenning.
       x: camera.position.x,
       y: camera.position.y,
-      z: camera.position.z
+      z: camera.position.z,
+      color: myColor, // Client sends this to the server. Now server can send it to all clients.
     };
     socket.emit('msg', myMessage);
   }
+
+  // Now how do you link so that it's only one persons's position being referenced? Aidan will send a repo.
 
   if (ev.key === "l" || ev.key === "L"){
     if (leek){
@@ -230,13 +262,6 @@ function onKeyDown(ev){
     }
   }
 }
-
-
-// TODO:
-// See if material is correct;
-// Add shadows;
-// Play around with the lights;
-
 
 
 function lights(){
@@ -310,9 +335,10 @@ function init() {
   loadBricksModel();
   loadLeekModel();
 
+  // WEBSOCKET event listener, not related to Three.js. Only if we do actions over a variable with Three JS properties.
   window.addEventListener('keydown', onKeyDown);
 
-  // start the draw loop
+  // Start the draw loop
   draw();
 }
 

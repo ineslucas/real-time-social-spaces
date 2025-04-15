@@ -51,7 +51,9 @@ const camera = new THREE.PerspectiveCamera(35, sizes.width / sizes.height, 0.1, 
 camera.position.set(0, 0, 18)
 scene.add(camera)
 
-// Controls
+
+
+// Controls - 📸❌
 const controls = new OrbitControls(camera, canvas)
 controls.enableDamping = true
 
