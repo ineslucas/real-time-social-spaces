@@ -3,10 +3,14 @@
 // What if I could make a 3D editor where the physics stay in place?
 // Or each player has their own bubble?
 
-// Inspo/resources:
-// https://threejs.org/examples/webgl_marchingcubes.html
+// If changes are happening on the frontend, no need to restart the server.
 
-// See also Metaballs-with-Physics-main 🚨
+// Inspo/resources:
+// https://threejs.org/examples/webgl_marchingcubes.html // Q: How do we see what's actually being passed through?
+// https://threejs.org/examples/?q=march#webgl_marchingcubes
+
+
+// See also downloads/Metaballs-with-Physics-main 🚨
 
 import * as THREE from "three";
 import { FirstPersonControls } from "./FirstPersonControls.js";
@@ -210,18 +214,6 @@ function onConnection(){
   console.log("Our socket is connected to the server");
 }
 
-// this comes later!! triggered by onKeyDown event, should be underneath.
-function onMessage(msg){
-  console.log(msg);
-  // TBD understand what exactly is triggering the torus;
-    // This is triggered from server side in response to onKeyDown.
-  let geo = new THREE.TorusGeometry(2,0.1,12,12);
-  let mat = new THREE.MeshNormalMaterial({color: msg.color});
-  let mesh = new THREE.Mesh(geo,mat);
-  mesh.position.set(msg.x,msg.y,msg.z);
-  scene.add(mesh);
-}
-
 // onKeyDown is the function to follow the keydown event we set up in init.
 function onKeyDown(ev){
   if (ev.key === "p"){
@@ -274,10 +266,44 @@ function onKeyDown(ev){
 
       console.log("Leek added in front of player at position:", targetPosition);
 
+      // SENDING THROUGH WEBSOCKET
+      // Then after the leek has been added for one single player, time to add it also to everyone else's machine.
+        // But we're still moving around the same leek.
+      // ⁉️ Is there a better structure in terms of order of operations?
+
+      // ‼️ ‼️ ‼️ ‼️ ‼️ ‼️
+      let myColor = document.getElementById('colorInput').value;
+      let myMessage = {
+        // Here you can add whatever data you want to send to the frontend from each client connected through websocket.
+        // Here we're triggering it through the keydown event, but we could also add it to the draw loop, if we want it to keep hapenning.
+        x: camera.position.x,
+        y: camera.position.y,
+        z: camera.position.z,
+        color: myColor, // Client sends this to the server. Now server can send it to all clients.
+      };
+
+      socket.emit('msg', myMessage); // In theory, this triggers onMessage which triggers the torus.
     } else {
       console.log("Leek model not loaded yet");
     }
   }
+}
+
+// Triggered by onKeyDown event above - this happens:
+function onMessage(msg){
+  console.log(msg);
+  // TBD understand what exactly is triggering the torus;
+    // This is triggered from server side in response to onKeyDown.
+  let geo = new THREE.TorusGeometry(2,0.1,12,12);
+  let mat = new THREE.MeshNormalMaterial({color: msg.color});
+  let mesh = new THREE.Mesh(geo,mat);
+  mesh.position.set(msg.x,msg.y,msg.z);
+  scene.add(mesh);
+
+  // ++++
+  // ‼️‼️‼️ If there's no leek information here, then we won't see a leek on other people's machines.
+  // ⁉️ Also DB is still not getting filled. 
+  // ++++
 }
 
 

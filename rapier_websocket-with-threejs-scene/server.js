@@ -7,17 +7,17 @@
     // bower install nedb         # For the browser versions, which will be in browser-version/out
 
 // If I wanted to store data: //⭐️ Step 1
-let storage = []; // then push msg into array in onMessage
-// When we do server side changes, we need to restart the server.
-// You might have an architecture where you have a central database server (like Mongo or mySQL) and then there's several web servers talking back to it.
+// let storage = []; // then push msg into array in onMessage
+  // When we do server side changes, we need to restart the server.
+  // You might have an architecture where you have a central database server (like Mongo or mySQL) and then there's several web servers talking back to it.
+
 // With NeDB, the server is right inside Node.js.
 // Typically you would add a timestamp to the JSON object.
 // JSON object as opposed to an array.
 
 
-let Datastore = require
-
-
+let Datastore = require('nedb');
+let db = new Datastore({filename:'database.db',autoload:true}); // database.db gets created on the first run.
 
 // the express package will run our server
 const express = require("express");
@@ -47,7 +47,7 @@ function onConnection(socket){
   ///////////////////
   // Now usign NeDB:
 
-  db.find({}, function(err, storage) {
+  db.find({}, function(err, storage) { // Is storage an NeDB object?
     for (let i = 0; i<storage.length; i++) {
       socket.emit('msg', storage[i]);
     }
@@ -66,10 +66,13 @@ function onMessage(msg){
   console.log(msg);
   // storage.push(msg); //⭐️ Step 2
 
+  // NeDB
+  msg.ts = Date.now(); // NeDB doesn't have a timestamp, so we need to add one.
   db.insert(msg, function(err, newdoc) {
     console.log(err);
   });
   io.emit('msg', msg); // resends message to everyone.
 }
 
-// EPOC: date.now() is the number of milliseconds since 1970, when programmers decided it was the birth of computing. 
+// EPOC: date.now() is the number of milliseconds since 1970, when programmers decided it was the birth of computing.
+// ‼️ there's an isDate bug, I don't think we actually checked for it in class.
