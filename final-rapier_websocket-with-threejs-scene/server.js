@@ -15,7 +15,6 @@
 // Typically you would add a timestamp to the JSON object.
 // JSON object as opposed to an array.
 
-
 let Datastore = require('nedb');
 let db = new Datastore({filename:'database.db',autoload:true}); // database.db gets created on the first run.
 
@@ -34,29 +33,34 @@ console.log("Server is running on http://localhost:8080");
 /////SOCKET.IO///////
 const io = require("socket.io")().listen(server);
 
+// Store connected peers for WebRTC
+const peers = {};
 
 io.on("connection", onConnection);
 
-
 function onConnection(socket){
-  // ⭐️ Step 3
-  // for (let i = 0; i < storage.length; i++) {
-  //   socket.emit('msg', storage[i]);
-  // }
-
-  ///////////////////
-  // Now usign NeDB:
-
-  db.find({}, function(err, storage) { // Is storage an NeDB object?
-    for (let i = 0; i<storage.length; i++) {
-      socket.emit('msg', storage[i]);
-    }
-  })
-
-  ///////////////////
-
   console.log('Someone connected to our websocket server!');
   console.log('This is their ID: ', socket.id);
+
+  // Send list of existing peers to new user
+  socket.emit('introduction', peers);
+
+  // Notify others about new peer
+  socket.broadcast.emit('newPeerConnected', socket.id);
+
+  // Handle WebRTC signaling
+  socket.on('signal', (to, from, data) => {
+    io.to(to).emit('signal', to, from, data);
+  });
+
+  // console.log('Someone connected to our websocket server!');
+  // console.log('This is their ID: ', socket.id);
+
+  // Handle peer disconnection
+  socket.on('disconnect', () => {
+    io.emit('peerDisconnected', socket.id);
+    delete peers[socket.id];
+  });
 
   socket.on('msg', onMessage);
 }

@@ -1,3 +1,14 @@
+// Microphone:
+// If someone on the WebRTC connection is talking, will the other one hear it if their mic is not on?
+
+
+// Make an interface!
+// Need a counter for how many people are connected.
+
+// How does this work for mobile?
+
+///////////////////////
+
 // Aidan will send a threejs-webrtc.
 // npm install + node server.js to run the server
 // What if I could make a 3D editor where the physics stay in place?
@@ -20,6 +31,7 @@ import RAPIER from 'https://cdn.skypack.dev/@dimforge/rapier3d-compat@0.11.2';
 import { getBody } from "./getBody.js";
 // import getLayer from "./getLayer.js";
 import { MarchingCubes } from "three/addons/objects/MarchingCubes.js";
+// import * as GaussianSplats3D from '@mkkellogg/gaussian-splats-3d';
 
 // create variables and make them available globally
 let scene, myRenderer, camera, mousePos;
@@ -34,6 +46,11 @@ let socket;
 
 // 3D models
 let leek; // Global variable to store the leek model
+
+// WebRTC variables
+let peers = {};
+let localMediaStream = null;
+let audioElements = {}; // Store audio elements for each peer
 
 // Initialize Rapier
 await RAPIER.init();
@@ -346,7 +363,7 @@ function lights(){
   BODIES
 */
 
-// How much of this is coming from MarchingCubes vs from rapier?
+// How much of this is coming from MarchingCubes vs from rapier? Their wrapping!
 
 let numBodies, bodies, debugBodies, body;
 let matcap, bodyDesc, mouseRigid, dynamicCollider;
@@ -431,7 +448,183 @@ function createMetaballs() {
 
 // Add gradient background 🌸
 
-function init() {
+// Initialize WebRTC
+async function initializeWebRTC() {
+  try {
+    // Get microphone access
+    localMediaStream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+      video: false
+    });
+
+    console.log('Microphone access granted:', localMediaStream);
+    console.log('Audio tracks:', localMediaStream.getAudioTracks());
+
+    // Setup WebRTC event listeners
+    setupWebRTCListeners();
+
+    console.log('WebRTC initialized successfully');
+  } catch (err) {
+    console.error('Failed to get microphone access:', err);
+  }
+}
+
+// Create WebRTC peer connection
+function createPeerConnection(theirSocketId, isInitiator) {
+  console.log('Creating peer connection with:', theirSocketId, 'isInitiator:', isInitiator);
+
+  let peerConnection = new SimplePeer({
+    initiator: isInitiator,
+    stream: localMediaStream,
+    trickle: false,
+    config: {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
+      ]
+    }
+  });
+
+  peerConnection.on('signal', (data) => {
+    console.log('Sending signal to peer:', theirSocketId, 'signal type:', data.type);
+    socket.emit('signal', theirSocketId, socket.id, data);
+  });
+
+  peerConnection.on('connect', () => {
+    console.log('Peer connection established with:', theirSocketId);
+  });
+
+  peerConnection.on('stream', (stream) => {
+    console.log('Received stream from peer:', theirSocketId, 'stream active:', stream.active);
+    console.log('Stream tracks:', stream.getTracks());
+
+    // Create audio element with better controls
+    const audioElement = document.createElement('audio');
+    audioElement.srcObject = stream;
+    audioElement.autoplay = true;
+    audioElement.controls = true;
+    audioElement.volume = 1.0;
+    audioElement.style.position = 'fixed';
+    audioElement.style.bottom = '10px';
+    audioElement.style.right = '10px';
+    audioElement.style.zIndex = '1000';
+    audioElement.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+    audioElement.style.padding = '5px';
+    audioElement.style.borderRadius = '5px';
+
+    // Store the audio element
+    audioElements[theirSocketId] = audioElement;
+    document.body.appendChild(audioElement);
+    console.log('Audio element created and added for peer:', theirSocketId);
+  });
+
+  peerConnection.on('iceStateChange', (state) => {
+    console.log('ICE state changed for peer:', theirSocketId, 'state:', state);
+  });
+
+  peerConnection.on('close', () => {
+    console.log('Peer disconnected:', theirSocketId);
+    if (audioElements[theirSocketId]) {
+      audioElements[theirSocketId].remove();
+      delete audioElements[theirSocketId];
+    }
+  });
+
+  peerConnection.on('error', (err) => {
+    console.error('Peer connection error:', err);
+  });
+
+  peers[theirSocketId] = {
+    peerConnection: peerConnection
+  };
+
+  return peerConnection;
+}
+
+// Setup WebRTC event listeners
+function setupWebRTCListeners() {
+  socket.on('introduction', (peerInfo) => {
+    console.log('Received introduction with peers:', peerInfo);
+    for (let theirId in peerInfo) {
+      createPeerConnection(theirId, true);
+    }
+  });
+
+  socket.on('newPeerConnected', (theirId) => {
+    console.log('New peer connected:', theirId);
+    if (theirId !== socket.id) {
+      createPeerConnection(theirId, false);
+    }
+  });
+
+  socket.on('signal', (to, from, data) => {
+    console.log('Received signal from:', from, 'to:', to, 'signal type:', data.type);
+    if (to === socket.id) {
+      let peer = peers[from];
+      if (peer && peer.peerConnection) {
+        console.log('Processing signal for existing peer:', from);
+        peer.peerConnection.signal(data);
+      } else {
+        console.log('Creating new peer connection for signal from:', from);
+        let peerConnection = createPeerConnection(from, false);
+        peerConnection.signal(data);
+      }
+    }
+  });
+
+  socket.on('peerDisconnected', (id) => {
+    console.log('Peer disconnected:', id);
+    if (peers[id]) {
+      peers[id].peerConnection.destroy();
+      delete peers[id];
+    }
+  });
+}
+
+// Update microphone state based on mouse position
+function updateMicrophoneState() {
+  if (localMediaStream && mousePos) {
+    const audioTrack = localMediaStream.getAudioTracks()[0];
+    if (audioTrack) {
+      // Only enable microphone when mouse is at origin
+      const isAtOrigin = Math.abs(mousePos.x) < 0.1 &&
+                        Math.abs(mousePos.y) < 0.1 &&
+                        Math.abs(mousePos.z) < 0.1;
+
+      console.log('Is at origin:', isAtOrigin);
+      console.log('Audio track enabled before:', audioTrack.enabled);
+
+      // Force the audio track state to match isAtOrigin
+      audioTrack.enabled = isAtOrigin;
+
+      console.log('Audio track enabled after:', audioTrack.enabled);
+
+      // Add visual feedback for microphone state
+      const micStatus = document.getElementById('micStatus') || createMicStatusElement();
+      micStatus.textContent = isAtOrigin ? '🎤 Microphone Active' : '🎤 Microphone Inactive';
+      micStatus.style.color = isAtOrigin ? '#4CAF50' : '#f44336';
+    }
+  }
+}
+
+// Create microphone status element -> the text that says "Microphone Active" or "Microphone Inactive"
+function createMicStatusElement() {
+  const micStatus = document.createElement('div');
+  micStatus.id = 'micStatus';
+  micStatus.style.position = 'fixed';
+  micStatus.style.top = '10px';
+  micStatus.style.left = '10px';
+  micStatus.style.padding = '10px';
+  micStatus.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+  micStatus.style.color = '#f44336';
+  micStatus.style.borderRadius = '5px';
+  micStatus.style.zIndex = '1000';
+  document.body.appendChild(micStatus);
+  return micStatus;
+}
+
+// Modify the existing init function
+async function init() {
   scene = new THREE.Scene();
   scene.background = new THREE.Color("rgb(20,20,20)");
 
@@ -493,35 +686,39 @@ function init() {
       // But why is it always 0?
     // mousePos.copy(intersectionPoint).divideScalar(10); // Increased divisor to make values smaller
       // Feels like it's moving around like a circle around the origin.
-    console.log("updated mousePos", mousePos);
+
+    //  console.log("updated mousePos", mousePos); // 🧵
+
+    // Update microphone state based on new mouse position
+    updateMicrophoneState();
   });
 
-  // mesh
-  // let grid = new THREE.GridHelper(100, 100);
-  // scene.add(grid);
-
-  // Add grid and axes helpers
+  // grid and axes helpers
   // const gridHelper = new THREE.GridHelper(20, 20, 0x444444, 0x888888);
   // scene.add(gridHelper);
 
-  const axesHelper = new THREE.AxesHelper(5);
-  scene.add(axesHelper);
+  //AXES HELPER
+  // const axesHelper = new THREE.AxesHelper(5);
+  // scene.add(axesHelper);
 
     // Red line: X-axis
     // Green line: Y-axis
     // Blue line: Z-axis
 
-  // add websocket support
+  //  websocket support
   setupMySocket();
 
   lights();
   loadBricksModel();
-  loadLeekModel();
+  // loadLeekModel();
   addingBodies();
   createMetaballs();
 
   // WEBSOCKET event listener, not related to Three.js. Only if we do actions over a variable with Three JS properties.
   window.addEventListener('keydown', onKeyDown);
+
+  // Initialize WebRTC 🌸
+  await initializeWebRTC();
 
   // Start the draw loop
   draw();
@@ -540,5 +737,40 @@ function draw() {
   window.requestAnimationFrame(draw);
 }
 
-// get everything started by calling init
+// // GAUSSIAN SPLATS
+// const boxColor = 0xBBBBBB;
+// const boxGeometry = new THREE.BoxGeometry(2, 2, 2);
+// const boxMesh = new THREE.Mesh(boxGeometry, new THREE.MeshBasicMaterial({'color': boxColor}));
+// boxMesh.position.set(3, 2, 2);
+// scene.add(boxMesh);
+
+// // Create multiple instances of the Manhattan gaussian splat
+// const manhattanPositions = [
+//     { x: 0, y: 0, z: 0 },
+//     { x: 10, y: 0, z: 0 },
+//     { x: -10, y: 0, z: 0 },
+//     { x: 0, y: 0, z: 10 },
+//     { x: 0, y: 0, z: -10 }
+// ];
+
+// // Create a viewer for each instance
+// manhattanPositions.forEach((pos, index) => {
+//     const viewer = new GaussianSplats3D.Viewer({
+//         'scene': scene,
+//     });
+
+//     viewer.addSplatScene('./Manhattan.ply')
+//         .then(() => {
+//             // Position each instance
+//             viewer.position.set(pos.x, pos.y, pos.z);
+//             // Optional: Add some rotation variation
+//             viewer.rotation.y = index * Math.PI / 4;
+//             viewer.start();
+//         })
+//         .catch(error => {
+//             console.error(`Error loading Manhattan splat ${index}:`, error);
+//         });
+// });
+
+// // get everything started by calling init
 init();
